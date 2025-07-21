@@ -1,78 +1,92 @@
-# Aave V2 Wallet Credit Scoring Engine
+Aave V2 Wallet Credit Scoring Engine
+Author: [Your Name]
+Date: 21-07-2025
+Version: 3.0
 
-**Author:** [Your Name]
-**Date:** 21-07-2025
-**Version:** 1.0
+Project Overview
+This project provides a suite of scripts to analyze raw Aave V2 transaction data and generate a credit score (from 0 to 1000) for each unique user wallet. The project showcases an evolution of three machine learning models, each adding a new layer of sophistication to how a wallet's on-chain behavior is evaluated.
 
-## Project Overview
+The core of the project is to assign higher scores to reliable users and lower scores to those exhibiting risky or irresponsible patterns, using the Isolation Forest anomaly detection algorithm as the foundation.
 
-This project provides a one-step script to analyze raw Aave V2 transaction data and generate a credit score (from 0 to 1000) for each unique user wallet. The script uses a machine learning model to evaluate a wallet's historical behavior, assigning higher scores to reliable users and lower scores to those exhibiting risky or irresponsible patterns.
+Model Evolution & Scoring Logic
+The project evolved through three distinct models, each building upon the last to create a more nuanced and accurate risk profile.
 
-The entire pipeline—from data loading to scoring and generating an analysis graph—is contained within the single `src/scoring.py` script.
+Model v1: The Baseline (scoring.py)
+The first model establishes a baseline by focusing on the most direct indicators of risk and reliability.
 
-## Scoring Logic, Validation, and Transparency
+Core Logic: Identifies wallets with major negative events (liquidations) as anomalies.
 
-This section details the logic behind the credit score, how its validity is confirmed, and how the model can be extended.
+Key Features:
 
-### Core Logic: Anomaly Detection
+liquidation_count: The number of times a wallet was liquidated.
 
-The scoring engine uses an **Isolation Forest**, a machine learning model designed for **anomaly detection**. Our core assumption is:
+repay_to_borrow_ratio: A measure of debt repayment reliability.
 
-> **Responsible financial behavior is the norm, while high-risk behavior is an anomaly.**
+net_worth_proxy_usd: The net difference between total deposits and borrows.
 
-Instead of defining hard-coded rules (e.g., "if liquidation, then score = 50"), the model learns the patterns of the "normal" majority of users and then identifies which wallets deviate significantly from this norm. Wallets that are flagged as anomalies receive a lower score.
+wallet_age_days: The age of the wallet's on-chain history.
 
-### Feature Engineering for Transparency
+Model v2: Advanced Risk Analysis (scoring_v2.py)
+The second model introduces a more proactive measure of risk by analyzing how close a user gets to financial distress.
 
-To ensure the model's decisions are based on sound financial principles, we feed it a specific set of engineered features. This makes the logic transparent, as we know exactly what characteristics are being judged:
+Core Logic: Moves beyond just counting liquidations to measure a user's ongoing risk management.
 
-* **`liquidation_count`**: The number of times a wallet has been liquidated. This is the most powerful indicator of high-risk behavior.
-* **`repay_to_borrow_ratio`**: A measure of financial responsibility. A ratio near 1.0 indicates a user reliably repays their debts.
-* **`net_worth_proxy_usd`**: The net difference between total deposits and borrows. A positive value suggests financial stability.
-* **`wallet_age_days` & `unique_days_active`**: Measures of history and consistent engagement with the protocol. Longer-term, consistent users are generally more reliable.
+Key New Feature:
 
-### Validation: How We Know the Score is Meaningful
+minimum_health_factor: The script simulates the wallet's entire history to find the lowest point its Health Factor ever reached. A user who constantly hovers near the liquidation threshold (1.0) is identified as riskier than one who maintains a high, safe Health Factor.
 
-The model's output is validated by confirming a direct correlation between scores and on-chain behavior:
+Model v3: Ultimate Behavioral Profile (scoring_v3.py)
+The final and most robust model incorporates the context of what assets a user interacts with, adding another layer of behavioral analysis.
 
-1.  **Low Scores Correlate with Liquidations:** When we manually inspect the lowest-scoring wallets (e.g., scores < 200), we consistently find they have at least one `liquidation_call` event in their history. This confirms the model correctly identifies and penalizes the highest-risk users.
-2.  **High Scores Correlate with Safe Behavior:** The highest-scoring wallets (e.g., scores > 800) invariably have **zero** liquidations, a long history of activity, and a healthy repayment ratio.
-3.  **Logical Consistency:** The model correctly scores a new wallet with one safe deposit higher than a very active wallet that has been liquidated. This proves the logic prioritizes **safety over raw activity**, which is crucial for a credit score.
+Core Logic: Understands that how you use assets is as important as how much you borrow.
 
-### Extensibility: How to Improve the Model
+Key New Features:
 
-The current model is a robust baseline. It can be easily extended for greater accuracy or to evaluate different behaviors:
+volatile_collateral_ratio: Calculates the percentage of a user's collateral that is in volatile assets (like WETH, WMATIC) versus stablecoins (like USDC, DAI). A higher ratio indicates a riskier collateral profile.
 
-* **Add More Features:** The `engineer_features` function in `src/scoring.py` can be modified to include new metrics, such as:
-    * **Health Factor Analysis:** Tracking how close a user's health factor gets to the liquidation threshold (1.0).
-    * **Asset Diversity:** Analyzing the variety of assets a user deposits or borrows.
-    * **Flash Loan Usage:** Identifying wallets that frequently use flash loans, which can be a sign of sophisticated (and potentially risky) strategies.
-* **Tune the Model:** The `IsolationForest` model has parameters (like `contamination`) that can be tuned to make it more or less sensitive to anomalies.
-* **Swap the Model:** The scoring function can be replaced with a different model entirely, such as a rules-based scorecard (similar to CIBIL/Experian) for maximum transparency, or a more complex model like a Gradient Boosting Tree if labeled data becomes available.
+asset_diversification: Counts the number of unique assets a user has interacted with. A higher number can indicate a more sophisticated and engaged user.
 
-## How to Run the Project
+Validation and Transparency
+The validity of all three models is confirmed by observing a direct correlation between scores and on-chain behavior.
 
-### Prerequisites
+Low Scores consistently correlate with high-risk indicators like liquidations or a very low minimum Health Factor.
 
-* Python 3.8+
-* A Python virtual environment
+High Scores consistently correlate with safe behaviors like zero liquidations, a high Health Factor, and a long, active history.
 
-### Setup & Execution
+Logical Progression: The scores from v1 to v3 become progressively more nuanced, correctly identifying users who are subtly risky even if they have never been liquidated.
 
-1.  **Clone the repository and navigate into the project folder.**
-2.  **Set up the environment and install dependencies:**
-    ```bash
-    # Create and activate a virtual environment
-    python -m venv venv
-    source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+How to Run the Project
+Prerequisites
+Python 3.8+
 
-    # Install required libraries
-    pip install -r requirements.txt
-    ```
-3.  **Place your data file** (e.g., `user-wallet-transactions.json`) into the `/data` directory.
-4.  **Run the script:**
-    ```bash
-    python src/scoring.py data/your_data_file.json
-    ```
+A Python virtual environment
 
-The script will execute the entire pipeline and generate `wallet_scores.csv` and `score_distribution.png` in the root project directory.
+Setup & Execution
+Clone the repository and navigate into the project folder.
+
+Set up the environment and install dependencies:
+
+# Create and activate a virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+
+# Install required libraries
+pip install -r requirements.txt
+
+Place your data file (e.g., user-wallet-transactions.json) into the /data directory.
+
+Run the desired scoring script:
+
+To run the v1 model:
+
+python src/scoring.py data/your_data_file.json
+
+To run the v2 model (with Health Factor):
+
+python src/scoring_v2.py data/your_data_file.json
+
+To run the v3 model (Ultimate):
+
+python src/scoring_v3.py data/your_data_file.json
+
+Each script will generate its own corresponding wallet_scores_vX.csv and score_distribution_vX.png files.
